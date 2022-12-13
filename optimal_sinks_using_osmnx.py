@@ -279,7 +279,7 @@ fire_origin=(39.79302,-121.58823)
 num_to_open = 4
 
 #distance in km. Maximum distance threshold approximately 50km. (somewhat arbitrary currently)
-kpcoef=40
+kpcoef=25
 
 #get the data
 origins,destinations,distances,populations = get_data(place_name,fire_origin)
@@ -297,7 +297,7 @@ epsilon=-1
 alpha=calculate_kappa(origins_list,destinations_list,distances,populations)
 
 #turn kpcoef into kolm pollak distance
-kpcoef=np.exp(alpha*kpcoef)
+kpcoef=len(origins_list)*np.exp(alpha*kpcoef)
 
 #this changes the distances to be e^(distance*alpha)
 distances_copy=distances.copy()
