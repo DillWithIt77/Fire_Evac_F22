@@ -264,7 +264,7 @@ def create_fire_mat(G, fire_orig_radii, T, removed_node_mat, edge_dist_mat, fire
         
     end = time.time()
     if output:
-        print(f"Time to do Fire Poly for Time Horizon {time_horizon}: {end - start}")
+        print(f"Time to do Fire Poly for Time Horizon {T}: {end - start}")
     
     return (removed_node_mat_copy, edge_dist_mat_copy, fire_polygon_mat_copy)
 
@@ -349,7 +349,7 @@ def time_expand_with_removal_dyn(G, ten, time_int_size, prev_T, curr_T,**kwargs)
                     else:
                         percent_cap = 1
                     
-                    if prev_time_horizon == 0 or (node_num)+(j-i)+(len(orig_nodes)*time_int_end) in new_nodes:
+                    if prev_T == 0 or (node_num)+(j-i)+(len(orig_nodes)*time_int_end) in new_nodes:
                         if (node_num,(node_num)+(j-i)+(len(orig_nodes)*time_int_end)) in ten_copy.edges:
                             ten_copy[node_num][(node_num)+(j-i)+(len(orig_nodes)*time_int_end)]['upper'] += G[i][j][k]['upper']*percent_cap
                         else:
@@ -374,7 +374,7 @@ def time_expand_with_removal_dyn(G, ten, time_int_size, prev_T, curr_T,**kwargs)
                             percent_cap = edge_dist_mat[m][(i,j)]/time_int_end
                     else:
                         percent_cap = 1
-                    if prev_time_horizon == 0 or (node_num)+(j-i)+(len(orig_nodes)*time_int_end) in new_nodes:
+                    if prev_T == 0 or (node_num)+(j-i)+(len(orig_nodes)*time_int_end) in new_nodes:
                         if (node_num,(node_num)+(j-i)+(len(orig_nodes)*time_int_end)) in ten_copy.edges:
                             ten_copy[node_num][(node_num)+(j-i)+(len(orig_nodes)*time_int_end)]['upper'] += G[i][j]['upper']*percent_cap
                         else:
@@ -389,7 +389,7 @@ def time_expand_with_removal_dyn(G, ten, time_int_size, prev_T, curr_T,**kwargs)
     return ten_copy
 
 #### Functions Used in Deteremining the Time Horizon for Inital Evaucation Plan
-def add_s_t(G,ten, time_horizon,**kwargs):
+def add_s_t(G,ten, T,**kwargs):
     '''
     Inputs:
     G: NetworkX MultiDigraph of orignal road network
@@ -406,7 +406,7 @@ def add_s_t(G,ten, time_horizon,**kwargs):
     ten_copy = ten.copy()
     orig_nodes = list(G.nodes)
     ten_nodes = list(ten_copy.nodes)
-    removed_nodes_mat = kwargs.get('removed_nodes_mat',[ [] for _ in range(time_horizon)])
+    removed_nodes_mat = kwargs.get('removed_nodes_mat',[ [] for _ in range(T)])
 
     sup_nodes = [x for x,y in ten_copy.nodes(data=True) if y['sup_dem'] > 0]
     dem_nodes = [x for x,y in G.nodes(data=True) if y['sup_dem'] < 0]
@@ -415,20 +415,20 @@ def add_s_t(G,ten, time_horizon,**kwargs):
     t = max(ten_nodes)+1
     
     ten_copy.add_node(s,name = f'{s}-{0}',level = 0,sup_dem = 0)
-    ten_copy.add_node(t,name = f'{len(orig_nodes)}-{time_horizon-1}',level = time_horizon-1, sup_dem = 0)
+    ten_copy.add_node(t,name = f'{len(orig_nodes)}-{T-1}',level = T-1, sup_dem = 0)
 
     for i in sup_nodes:
         ten_copy.add_edge(s, i, cost = 0, upper = ten._node[i]['sup_dem'], lower = 0)
 
     for i in dem_nodes:
-        for k in range(time_horizon-1):
+        for k in range(T-1):
             added = False
             if i in removed_nodes_mat[k+1]:
                 ten_copy.add_edge((i+1) + ((k) * len(orig_nodes)),t, upper = -G._node[i]['sup_dem'], lower = 0)
                 added = True
                 break;
         if added is False:
-            ten_copy.add_edge((i+1) + ((time_horizon-1) * len(orig_nodes)),t, upper = -G._node[i]['sup_dem'], lower = 0)
+            ten_copy.add_edge((i+1) + ((T-1) * len(orig_nodes)),t, upper = -G._node[i]['sup_dem'], lower = 0)
 
     end = time.time()
     print('Add Super Source and Sink Time: ',end-start)
@@ -796,3 +796,39 @@ def evac_update(full_ten_s_t, G, orig_removed_nodes_mat, orig_edge_dist_mat, ori
     print('Evacuation Plan Successfully Updated')
     
     return part_ten_s_t, comb_rmvd_nodes_mat, comb_edge_dist_mat, comb_fire_poly_mat, flow_dict_part, flow_value_part
+
+#### Function to Covert from Time-Expanded Network Notation to Original Graph Notation
+def flow_at_time_int(ten, flow_edges, G, end_time_int, **kwargs):
+    '''
+    Inputs:
+    ten: NetworkX DiGraph for a time-expanded network
+    flow_edges: list of edges which have flow in max-flow solution for given ten
+    G: NetworkX MultiDiGraph for original raod network
+    end_time_int: integer. time instance we plot to for flow in network
+
+    optional input:
+    start_time_int: integer. time instance we start to plot for flow in network
+
+    Outputs:
+    Return a list of edges in the original graph notation which had flow between time periods start_time_int and end_time_int
+    '''
+    start_time_int = kwargs.get('start_time_int',1) 
+    orig_edges = []
+    start_node = (len(G.nodes)*(start_time_int-1))+1
+    end_node = (len(G.nodes)*end_time_int)
+    node_range = list(range(start_node,end_node+1))
+    
+    for edge in flow_edges:
+        if edge[0] in node_range and edge[1] in node_range:
+            orig_edge = []
+            for node in edge:
+                nodes = [y['name'] for x,y in ten.nodes(data=True) if x == node]
+                node_str = nodes[0].split('-')
+                orig = int(node_str[0])-1
+                orig_edge.append(orig)
+            orig_edge = tuple(orig_edge)
+            if orig_edge in G.edges:
+                orig_edges.append(orig_edge)
+            elif (orig_edge[1],orig_edge[0]) in G.edges:
+                orig_edges.append((orig_edge[1],orig_edge[0]))
+    return orig_edges
