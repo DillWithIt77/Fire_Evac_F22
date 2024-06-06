@@ -362,6 +362,7 @@ def time_expand_with_removal_dyn(G, ten, time_int_size, prev_T, curr_T,**kwargs)
             time_int_end = math.ceil((G[i][j]['travel_time']/60)/time_int_size)
             for m in range(0,curr_T-1):
                 node_num = (i+1)+(len(orig_nodes)*m)
+                # if ((i,j) not in removed_edges_mat[m]) and (time_int_end+m < curr_T) and (j not in removed_nodes_mat[time_int_end+m]) and (i not in removed_nodes_mat[m]):
                 if (time_int_end+m < curr_T) and (j not in removed_nodes_mat[time_int_end+m]) and (i not in removed_nodes_mat[m]):                    
                     ### deteremine the capacipty the edge can have based on dist to fire
                     if (i,j) in edge_dist_mat[m]:
@@ -406,7 +407,6 @@ def add_s_t(G,ten, T,**kwargs):
     orig_nodes = list(G.nodes)
     ten_nodes = list(ten_copy.nodes)
     removed_nodes_mat = kwargs.get('removed_nodes_mat',[ [] for _ in range(T)])
-    output = kwargs.get('verbose',False)
 
     sup_nodes = [x for x,y in ten_copy.nodes(data=True) if y['sup_dem'] > 0]
     dem_nodes = [x for x,y in G.nodes(data=True) if y['sup_dem'] < 0]
@@ -431,8 +431,7 @@ def add_s_t(G,ten, T,**kwargs):
             ten_copy.add_edge((i+1) + ((T-1) * len(orig_nodes)),t, upper = -G._node[i]['sup_dem'], lower = 0)
 
     end = time.time()
-    if ouput:
-        print('Add Super Source and Sink Time: ',end-start)
+    print('Add Super Source and Sink Time: ',end-start)
 
     
     
@@ -451,6 +450,7 @@ def color_max_flow(graph, flow_dict):
 
     for (i,j) in edges:
         graph[i][j]['color'] = (0,0,0)
+        # print(f'({i},{j})')
         if i in flow_dict:
             if j in flow_dict[i]:
                 if flow_dict[i][j] !=0:
@@ -542,7 +542,7 @@ def det_num_int(G, pop, fire_orig_radii, **kwargs):
 
     while flow_value < pop:
 
-        rmvd_nodes_mat,edge_dist_mat,fire_polygon_mat = create_fire_mat(G, fire_orig_radii,num_time_ints, rmvd_nodes_mat,edge_dist_mat,fire_polygon_mat, verbose = output)
+        rmvd_nodes_mat,edge_dist_mat,fire_polygon_mat = create_fire_mat(G, fire_orig_radii,num_time_ints, rmvd_nodes_mat,edge_dist_mat,fire_polygon_mat)
         intersection = set(sup_nodes).intersection(set(rmvd_nodes_mat[0]))
         dem_subset = set(dem_nodes).issubset(set(rmvd_nodes_mat[-1]))
         while len(intersection) !=0 and len(sup_nodes) !=0:
@@ -553,24 +553,24 @@ def det_num_int(G, pop, fire_orig_radii, **kwargs):
             rmvd_nodes_mat = []
             fire_polygon_mat = []
             sup_nodes = [x for x,y in G.nodes(data=True) if y['sup_dem'] > 0]
-            rmvd_nodes_mat,edge_dist_mat,fire_polygon_mat = create_fire_mat(G, fire_orig_radii,num_time_ints, rmvd_nodes_mat,edge_dist_mat,fire_polygon_mat, verbose = output)
+            rmvd_nodes_mat,edge_dist_mat,fire_polygon_mat = create_fire_mat(G, fire_orig_radii,num_time_ints, rmvd_nodes_mat,edge_dist_mat,fire_polygon_mat)
             intersection = set(sup_nodes).intersection(set(rmvd_nodes_mat[0]))
         if len(intersection) !=0 and len(sup_nodes) ==0:
-            print(f"All sources have been overtaken by the fire, so evacuation is not possible.")
+            print(f"All sources have been overtaken by the fire, so evacuation possible.")
             break;
         if dem_subset:
             unsafe = True
-            print(f"All sinks have been overtaken by the fire, so not everyone can evacuate by time horizon {num_time_ints}.")
+            print(f"All sinks have been taken by the fire, not everyone can evacuate by time horizon {num_time_ints}.")
             print(f"Will return solution for time horizon {num_time_ints-1}")
             num_time_ints = num_time_ints-1
 
-            ten = time_expand_with_removal_dyn(G, prev_ten, time_int_len, prev_num_time_ints,num_time_ints, removed_nodes_mat = rmvd_nodes_mat,edge_distance_mat = edge_dist_mat, verbose = output)
-            s_t_ten = add_s_t(G, ten, num_time_ints, removed_nodes_mat = rmvd_nodes_mat, verbose = output)
+            ten = time_expand_with_removal_dyn(G, prev_ten, time_int_len, prev_num_time_ints,num_time_ints, removed_nodes_mat = rmvd_nodes_mat,edge_distance_mat = edge_dist_mat)
+            s_t_ten = add_s_t(G, ten, num_time_ints, removed_nodes_mat = rmvd_nodes_mat)
             flow_value, flow_dict = nx.maximum_flow(s_t_ten.copy(), 0, max(list(s_t_ten.copy().nodes)),capacity = 'upper',flow_func = shortest_augmenting_path)
             break;
         else:
-            ten = time_expand_with_removal_dyn(G, prev_ten, time_int_len, prev_num_time_ints, num_time_ints, removed_nodes_mat = rmvd_nodes_mat,edge_distance_mat = edge_dist_mat, verbose = output)
-            s_t_ten = add_s_t(G, ten, num_time_ints, removed_nodes_mat = rmvd_nodes_mat, verbose = output)
+            ten = time_expand_with_removal_dyn(G, prev_ten, time_int_len, prev_num_time_ints, num_time_ints, removed_nodes_mat = rmvd_nodes_mat,edge_distance_mat = edge_dist_mat)
+            s_t_ten = add_s_t(G, ten, num_time_ints, removed_nodes_mat = rmvd_nodes_mat)
             start = time.time()
             flow_value, flow_dict = nx.maximum_flow(s_t_ten.copy(), 0, max(list(s_t_ten.copy().nodes)),capacity = 'upper',flow_func = shortest_augmenting_path)
             end = time.time()
@@ -810,17 +810,16 @@ def flow_at_time_int(ten, flow_edges, G, end_time_int, **kwargs):
     start_time_int: integer. time instance we start to plot for flow in network
 
     Outputs:
-    Return a list of edges in the original graph notation which had flow which ends at or crosses between the time periods start_time_int and end_time_int
+    Return a list of edges in the original graph notation which had flow between time periods start_time_int and end_time_int
     '''
     start_time_int = kwargs.get('start_time_int',1) 
     orig_edges = []
     start_node = (len(G.nodes)*(start_time_int-1))+1
     end_node = (len(G.nodes)*end_time_int)
-    start_node_range = list(range(start_node,end_node+1))
-    end_node_range = list(range((len(G.nodes)*(end_time_int-1)),max(list(ten.nodes))))
+    node_range = list(range(start_node,end_node+1))
     
     for edge in flow_edges:
-        if edge[0] in start_node_range and edge[1] in end_node_range:
+        if edge[0] in node_range and edge[1] in node_range:
             orig_edge = []
             for node in edge:
                 nodes = [y['name'] for x,y in ten.nodes(data=True) if x == node]
