@@ -336,7 +336,6 @@ def time_expand_with_removal_dyn(G, ten, time_int_size, prev_T, curr_T,**kwargs)
             time_int_end = math.ceil((G[i][j][k]['travel_time']/60)/time_int_size)
             for m in range(0,curr_T-1):
                 node_num = (i+1)+(len(orig_nodes)*m)
-                # if ((i,j,k) not in removed_edges_mat[m]) and (time_int_end+m < curr_T) and (j not in removed_nodes_mat[time_int_end+m]) and (i not in removed_nodes_mat[m]):
                 if (time_int_end+m < curr_T) and (j not in removed_nodes_mat[time_int_end+m]) and (i not in removed_nodes_mat[m]):
                     ### deteremine the capacipty the edge can have based on dist to fire
                     if (i,j,k) in edge_dist_mat[m]:
@@ -431,7 +430,7 @@ def add_s_t(G,ten, T,**kwargs):
             ten_copy.add_edge((i+1) + ((T-1) * len(orig_nodes)),t, upper = -G._node[i]['sup_dem'], lower = 0)
 
     end = time.time()
-    if ouput:
+    if output:
         print('Add Super Source and Sink Time: ',end-start)
 
     
@@ -807,17 +806,23 @@ def flow_at_time_int(ten, flow_edges, G, end_time_int, **kwargs):
     end_time_int: integer. time instance we plot to for flow in network
 
     optional input:
-    start_time_int: integer. time instance we start to plot for flow in network
+    start_time_int: integer. time instance we start to plot for flow in network; default is 1
+    interval: boolean, switch to plot flow for an interval of time instances; default is False
 
     Outputs:
     Return a list of edges in the original graph notation which had flow which ends at or crosses between the time periods start_time_int and end_time_int
     '''
     start_time_int = kwargs.get('start_time_int',1) 
+    interval = kwargs.get('interval',False)
     orig_edges = []
     start_node = (len(G.nodes)*(start_time_int-1))+1
     end_node = (len(G.nodes)*end_time_int)
     start_node_range = list(range(start_node,end_node+1))
-    end_node_range = list(range((len(G.nodes)*(end_time_int-1)),max(list(ten.nodes))))
+
+    if interval:
+        end_node_range = list(range(start_node,max(list(ten.nodes))))
+    else:
+        end_node_range = list(range((len(G.nodes)*(end_time_int-1)),max(list(ten.nodes))))
     
     for edge in flow_edges:
         if edge[0] in start_node_range and edge[1] in end_node_range:
