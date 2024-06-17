@@ -264,7 +264,7 @@ def create_fire_mat(G, fire_orig_radii, T, removed_node_mat, edge_dist_mat, fire
         
     end = time.time()
     if output:
-        print(f"Time to do Fire Poly for Time Horizon {T}: {end - start}")
+        print(f"Time to do Fire Poly for Time Horizon {T-1}: {end - start} seconds")
     
     return (removed_node_mat_copy, edge_dist_mat_copy, fire_polygon_mat_copy)
 
@@ -382,7 +382,7 @@ def time_expand_with_removal_dyn(G, ten, time_int_size, prev_T, curr_T,**kwargs)
     
     end = time.time()
     if output:
-        print(f'Time to build TEN for T = {curr_T}: {end-start}')
+        print(f'Time to build WTEN for T = {curr_T-1}: {end-start} seconds')
 
     return ten_copy
 
@@ -431,7 +431,7 @@ def add_s_t(G,ten, T,**kwargs):
 
     end = time.time()
     if output:
-        print('Add Super Source and Sink Time: ',end-start)
+        print(f'Add Super Source and Sink Time: {end-start} seconds')
 
     
     
@@ -574,7 +574,7 @@ def det_num_int(G, pop, fire_orig_radii, **kwargs):
             flow_value, flow_dict = nx.maximum_flow(s_t_ten.copy(), 0, max(list(s_t_ten.copy().nodes)),capacity = 'upper',flow_func = shortest_augmenting_path)
             end = time.time()
             if output:
-                print(f'Time for Max Flow Algorithm {end-start} seconds')
+                print(f'Time for Max Flow Algorithm: {end-start} seconds')
                 print('----------------------------------------------------------------------')
 
             prev_ten = ten.copy()
@@ -593,13 +593,13 @@ def det_num_int(G, pop, fire_orig_radii, **kwargs):
     colored_max_flow_ten = color_max_flow(s_t_ten,flow_dict)
     end = time.time()
     if output:
-        print(f'Time to color edges with Flow in TEN: {end-start}')
+        print(f'Time to color edges with Flow in WTEN: {end-start} seconds')
     
     return (ints, flow_value, flow_dict, colored_max_flow_ten, full_ten, rmvd_nodes_mat, edge_dist_mat, fire_polygon_mat) 
 
 #### Functions for Updating the Initial Evaucation Plan
 
-def update_ten(full_ten, G, removed_nodes_mat, edge_dist_mat, time_int_update, T, time_int_size, flow_dict):
+def update_ten(full_ten, G, removed_nodes_mat, edge_dist_mat, time_int_update, T, time_int_size, flow_dict, **kwargs):
     '''
     Inputs:
     full_ten: Networkx DiGraph for time-expanded network with no fire data used for construction
@@ -615,6 +615,9 @@ def update_ten(full_ten, G, removed_nodes_mat, edge_dist_mat, time_int_update, T
     Output:
     part_ten: a truncated version of full_ten based on when what time instance the inital plan is updated
     '''
+    output = kwargs.get('verbose', False)
+
+    start = time.time()
 
     full_ten_copy = full_ten.copy()
     orig_nodes = list(G.nodes)
@@ -689,6 +692,10 @@ def update_ten(full_ten, G, removed_nodes_mat, edge_dist_mat, time_int_update, T
                     else:
                         part_ten.add_edge(node_num,(node_num)+(j-i)+(len(orig_nodes)*time_int_end),upper = G[i][j]['upper']*percent_cap, lower = 0)
 
+
+    end = time.time()
+    if output:
+        print(f'Time to create truncated WTEN for T = {T-1}: {end -start} seconds')
     return part_ten
 
 def merg_tens(full_ten_s_t, part_ten_s_t):
@@ -766,9 +773,12 @@ def evac_update(full_ten_s_t, G, orig_removed_nodes_mat, orig_edge_dist_mat, ori
     flow_value_part: total flow for max-flow solution on part_ten_s_t
     '''
 
-    full_ten_copy = full_ten_s_t.copy()
-
     time_int_size = kwargs.get('time_int_size', 1)
+    output = kwargs.get('verbose',False)
+
+    start = time.time()
+
+    full_ten_copy = full_ten_s_t.copy()
 
     comb_rmvd_nodes_mat = []
     comb_edge_dist_mat = []
@@ -776,7 +786,7 @@ def evac_update(full_ten_s_t, G, orig_removed_nodes_mat, orig_edge_dist_mat, ori
     
     ### get new predicted fire data
     new_rmvd_nodes_mat, new_edge_dist_mat, new_fire_poly_mat = create_fire_mat(G, fire_orig_radii, T, [], [], [], 
-                                                                              start_time_int = fire_time_int)
+                                                                              start_time_int = fire_time_int, verbose = output)
     
     ### update fire data at correct spots in original array
     comb_rmvd_nodes_mat = orig_removed_nodes_mat[:fire_time_int] + new_rmvd_nodes_mat
@@ -792,7 +802,9 @@ def evac_update(full_ten_s_t, G, orig_removed_nodes_mat, orig_edge_dist_mat, ori
     flow_value_part, flow_dict_part = nx.maximum_flow(part_ten_s_t.copy(), 0, max(list(part_ten_s_t.copy().nodes)),capacity = 'upper',
                                                 flow_func = shortest_augmenting_path)
 
-    print('Evacuation Plan Successfully Updated')
+    if output:
+        print(f'Time to update evaucation plan: {end-start} seconds')
+        print('Evacuation Plan Successfully Updated')
     
     return part_ten_s_t, comb_rmvd_nodes_mat, comb_edge_dist_mat, comb_fire_poly_mat, flow_dict_part, flow_value_part
 
