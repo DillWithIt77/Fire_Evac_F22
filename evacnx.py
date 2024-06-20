@@ -794,15 +794,19 @@ def evac_update(full_ten_s_t, G, orig_removed_nodes_mat, orig_edge_dist_mat, ori
     comb_fire_poly_mat = orig_fire_poly_mat[:fire_time_int] + new_fire_poly_mat
     
     ### recreate just ten that changes
-    part_ten = update_ten(full_ten_copy, G, comb_rmvd_nodes_mat, comb_edge_dist_mat, time_int_update, T, time_int_size, flow_dict)
+    part_ten = update_ten(full_ten_copy, G, comb_rmvd_nodes_mat, comb_edge_dist_mat, time_int_update, T, time_int_size, flow_dict, verbose = output)
 
     ### add super source and sink to partial ten
-    part_ten_s_t = add_s_t(G, part_ten, T)
+    part_ten_s_t = add_s_t(G, part_ten, T, verbose = output)
     ### solve max flow on partial network
+    start_max = time.time()
     flow_value_part, flow_dict_part = nx.maximum_flow(part_ten_s_t.copy(), 0, max(list(part_ten_s_t.copy().nodes)),capacity = 'upper',
                                                 flow_func = shortest_augmenting_path)
+    end_max = time.time()
+    end = time.time()
 
     if output:
+        print(f'Time for Max Flow Algorithm: {end_max-start_max} seconds')
         print(f'Time to update evaucation plan: {end-start} seconds')
         print('Evacuation Plan Successfully Updated')
     
