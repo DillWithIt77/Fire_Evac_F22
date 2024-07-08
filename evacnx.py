@@ -465,6 +465,7 @@ def det_num_int(G, pop, fire_orig_radii, **kwargs):
     fire_orig_radii: list of tuples of the form (lat, long, init_radius) for the circles of the fire polygon at a time t
 
     optional inputs:
+    T: integer, given time horizon t; default is computed as the time of the longest shortest path plus the number of edges in the path
     step_size: integer, step size of increase to time horizon T; default is 1
     verbose: boolean for including print statements; default is Flase
 
@@ -478,7 +479,7 @@ def det_num_int(G, pop, fire_orig_radii, **kwargs):
     edge_dist_mat: lists of lists of edge distances to fire for all time instances t=0,..,T
     fire_polygon_mat: lists of lists of MultiPoolygons/Polygongs representing the fire for all time instance t=0,..,T
     '''
-
+    T = kwargs.get('T', 0)
     step_size = kwargs.get('step_size', 1)
     output = kwargs.get('verbose', False)
 
@@ -507,26 +508,28 @@ def det_num_int(G, pop, fire_orig_radii, **kwargs):
         print(f'Feasability Check Completed: {end-start} seconds') 
 
     ###deteremine minimum number of time intervals by finding the longest time to travel between any of the sources or sinks
-    start = time.time()
-    for source in sup_nodes:
-        shortest_time = np.inf
-        for sink in dem_nodes:
-            current_travel_time = nx.shortest_path_length(G, source, sink, 'travel_time')
-            if current_travel_time <= shortest_time:
-                shortest_time = current_travel_time
-                shortest_path = nx.shortest_path(G, source, sink,'travel_time')
-        shortest_times.append(shortest_time)
-        shortest_paths.append(shortest_path)
+    if T==0:
+        start = time.time()
+        for source in sup_nodes:
+            shortest_time = np.inf
+            for sink in dem_nodes:
+                current_travel_time = nx.shortest_path_length(G, source, sink, 'travel_time')
+                if current_travel_time <= shortest_time:
+                    shortest_time = current_travel_time
+                    shortest_path = nx.shortest_path(G, source, sink,'travel_time')
+            shortest_times.append(shortest_time)
+            shortest_paths.append(shortest_path)
 
-    max_shortest_time = max(shortest_times)
-    max_shortest_path = shortest_paths[shortest_times.index(max_shortest_time)]
-    end = time.time()
-    if output:
-        print(f'Longest Shortest Path Deteremined: {end-start} seconds') 
+        max_shortest_time = max(shortest_times)
+        max_shortest_path = shortest_paths[shortest_times.index(max_shortest_time)]
+        end = time.time()
+        if output:
+            print(f'Longest Shortest Path Deteremined: {end-start} seconds') 
                 
     time_int_len = kwargs.get('time_int_len', 1)
-    num_time_ints = math.ceil((((max_shortest_time/60))+len(max_shortest_path))/time_int_len) ###time zero is when num_time_ints = 1
-    prev_num_time_ints = 0
+    if T==0:
+        T = math.ceil((((max_shortest_time/60))+len(max_shortest_path))/time_int_len) ###time zero is when T = 1
+    prev_T = 0
 
     ten = nx.DiGraph()
     prev_ten = ten.copy()
@@ -541,7 +544,7 @@ def det_num_int(G, pop, fire_orig_radii, **kwargs):
 
     while flow_value < pop:
 
-        rmvd_nodes_mat,edge_dist_mat,fire_polygon_mat = create_fire_mat(G, fire_orig_radii,num_time_ints, rmvd_nodes_mat,edge_dist_mat,fire_polygon_mat, verbose = output)
+        rmvd_nodes_mat,edge_dist_mat,fire_polygon_mat = create_fire_mat(G, fire_orig_radii,T, rmvd_nodes_mat,edge_dist_mat,fire_polygon_mat, verbose = output)
         intersection = set(sup_nodes).intersection(set(rmvd_nodes_mat[0]))
         dem_subset = set(dem_nodes).issubset(set(rmvd_nodes_mat[-1]))
         while len(intersection) !=0 and len(sup_nodes) !=0:
@@ -552,24 +555,24 @@ def det_num_int(G, pop, fire_orig_radii, **kwargs):
             rmvd_nodes_mat = []
             fire_polygon_mat = []
             sup_nodes = [x for x,y in G.nodes(data=True) if y['sup_dem'] > 0]
-            rmvd_nodes_mat,edge_dist_mat,fire_polygon_mat = create_fire_mat(G, fire_orig_radii,num_time_ints, rmvd_nodes_mat,edge_dist_mat,fire_polygon_mat, verbose = output)
+            rmvd_nodes_mat,edge_dist_mat,fire_polygon_mat = create_fire_mat(G, fire_orig_radii,T, rmvd_nodes_mat,edge_dist_mat,fire_polygon_mat, verbose = output)
             intersection = set(sup_nodes).intersection(set(rmvd_nodes_mat[0]))
         if len(intersection) !=0 and len(sup_nodes) ==0:
             print(f"All sources have been overtaken by the fire, so evacuation is not possible.")
             break;
         if dem_subset:
             unsafe = True
-            print(f"All sinks have been overtaken by the fire, so not everyone can evacuate by time horizon {num_time_ints}.")
-            print(f"Will return solution for time horizon {num_time_ints-1}")
-            num_time_ints = num_time_ints-1
+            print(f"All sinks have been overtaken by the fire, so not everyone can evacuate by time horizon {T}.")
+            print(f"Will return solution for time horizon {T-step_size}")
+            T = T-1
 
-            ten = time_expand_with_removal_dyn(G, prev_ten, time_int_len, prev_num_time_ints,num_time_ints, removed_nodes_mat = rmvd_nodes_mat,edge_distance_mat = edge_dist_mat, verbose = output)
-            s_t_ten = add_s_t(G, ten, num_time_ints, removed_nodes_mat = rmvd_nodes_mat, verbose = output)
+            ten = time_expand_with_removal_dyn(G, prev_ten, time_int_len, prev_T, T, removed_nodes_mat = rmvd_nodes_mat,edge_distance_mat = edge_dist_mat, verbose = output)
+            s_t_ten = add_s_t(G, ten, T, removed_nodes_mat = rmvd_nodes_mat, verbose = output)
             flow_value, flow_dict = nx.maximum_flow(s_t_ten.copy(), 0, max(list(s_t_ten.copy().nodes)),capacity = 'upper',flow_func = shortest_augmenting_path)
             break;
         else:
-            ten = time_expand_with_removal_dyn(G, prev_ten, time_int_len, prev_num_time_ints, num_time_ints, removed_nodes_mat = rmvd_nodes_mat,edge_distance_mat = edge_dist_mat, verbose = output)
-            s_t_ten = add_s_t(G, ten, num_time_ints, removed_nodes_mat = rmvd_nodes_mat, verbose = output)
+            ten = time_expand_with_removal_dyn(G, prev_ten, time_int_len, prev_T, T, removed_nodes_mat = rmvd_nodes_mat,edge_distance_mat = edge_dist_mat, verbose = output)
+            s_t_ten = add_s_t(G, ten, T, removed_nodes_mat = rmvd_nodes_mat, verbose = output)
             start = time.time()
             flow_value, flow_dict = nx.maximum_flow(s_t_ten.copy(), 0, max(list(s_t_ten.copy().nodes)),capacity = 'upper',flow_func = shortest_augmenting_path)
             end = time.time()
@@ -578,13 +581,13 @@ def det_num_int(G, pop, fire_orig_radii, **kwargs):
                 print('----------------------------------------------------------------------')
 
             prev_ten = ten.copy()
-            prev_num_time_ints = num_time_ints
-            num_time_ints +=step_size
+            prev_T = T
+            T +=step_size
             
     if unsafe:
-        ints = num_time_ints
+        ints = T
     else:
-        ints = num_time_ints - step_size
+        ints = T - step_size
     if output:
         print('Construct Colored Time Expanded Network')
     full_ten_temp = time_expand_with_removal_dyn(G, nx.DiGraph(), time_int_len, 0, ints)
